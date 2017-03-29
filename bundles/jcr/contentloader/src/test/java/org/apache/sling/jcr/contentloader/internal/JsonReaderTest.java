@@ -34,6 +34,7 @@ import org.jmock.Mockery;
 import org.jmock.Sequence;
 import org.jmock.integration.junit4.JMock;
 import org.jmock.integration.junit4.JUnit4Mockery;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @RunWith(JMock.class)
@@ -336,6 +337,47 @@ public class JsonReaderTest {
             allowing(creator).createAce("username1",new String[]{"jcr:read","jcr:write"},new String[]{}, null); inSequence(mySequence);
             allowing(creator).createAce("groupname1",new String[]{"jcr:read","jcr:write"},null, null); inSequence(mySequence);
             allowing(creator).createAce("groupname2",new String[]{"jcr:read"},new String[]{"jcr:write"}, "first"); inSequence(mySequence);
+            allowing(creator).finishNode(); inSequence(mySequence);
+        }});
+        this.parse(json);
+    }
+
+    @Test
+    public void testCreateAclFromPolicy() throws Exception {
+        String json = "{" +
+                "    \"rep:policy\": {" +
+                "" +
+                "        \"jcr:primaryType\": \"rep:ACL\"," +
+                "        \"allow\": {" +
+                "            \"rep:privileges\": [" +
+                "                \"jcr:addChildNodes\"" +
+                "            ]," +
+                "            \"rep:principalName\": \"username1\"," +
+                "            \"jcr:primaryType\": \"rep:GrantACE\"" +
+                "        }," +
+                "        \"deny\": {" +
+                "            \"rep:privileges\": [" +
+                "                \"jcr:addChildNodes\"" +
+                "            ]," +
+                "            \"rep:principalName\": \"username2\"," +
+                "            \"jcr:primaryType\": \"rep:DenyACE\"" +
+                "        }," +
+                "        \"deny0\": {" +
+                "            \"rep:privileges\": [" +
+                "                \"jcr:removeChildNodes\"" +
+                "            ]," +
+                "            \"rep:principalName\": \"username1\"," +
+                "            \"jcr:primaryType\": \"rep:DenyACE\"" +
+                "        }" +
+                "    }" +
+                "}";
+
+        this.mockery.checking(new Expectations() {{
+            allowing(creator).createNode(null, null, null); inSequence(mySequence);
+
+            allowing(creator).createAce("username1", new String[]{"jcr:addChildNodes"}, null, "0"); inSequence(mySequence);
+            allowing(creator).createAce("username2", null, new String[]{"jcr:addChildNodes"}, "1"); inSequence(mySequence);
+            allowing(creator).createAce("username1", null, new String[]{"jcr:removeChildNodes"}, "2"); inSequence(mySequence);
             allowing(creator).finishNode(); inSequence(mySequence);
         }});
         this.parse(json);

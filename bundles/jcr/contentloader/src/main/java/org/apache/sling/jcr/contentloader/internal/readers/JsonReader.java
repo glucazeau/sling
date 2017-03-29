@@ -18,19 +18,6 @@
  */
 package org.apache.sling.jcr.contentloader.internal.readers;
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Pattern;
-
-import javax.jcr.PropertyType;
-import javax.jcr.RepositoryException;
-
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
@@ -41,10 +28,18 @@ import org.apache.sling.commons.json.JSONObject;
 import org.apache.sling.jcr.contentloader.ContentCreator;
 import org.apache.sling.jcr.contentloader.ContentReader;
 
+import javax.jcr.PropertyType;
+import javax.jcr.RepositoryException;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
+import java.util.regex.Pattern;
+
 /**
  * The <code>JsonReader</code> Parses a Json document on content load and creates the
- * corresponding node structure with properties. Will not update protected nodes and
- * properties like rep:Policy and children.
+ * corresponding node structure with properties. Will not update protected nodes.
  *
  * <pre>
  * Nodes, Properties and in fact complete subtrees may be described in JSON files
@@ -126,6 +121,7 @@ public class JsonReader implements ContentReader {
     }
     private static final String SECURITY_PRINCIPLES = "security:principals";
     private static final String SECURITY_ACL = "security:acl";
+    private static final String REP_POLICY = "rep:policy";
 
     /**
      * @see org.apache.sling.jcr.contentloader.ContentReader#parse(java.net.URL, org.apache.sling.jcr.contentloader.ContentCreator)
@@ -165,6 +161,8 @@ public class JsonReader implements ContentReader {
             this.createPrincipals(o, contentCreator);
         } else if (SECURITY_ACL.equals(n)) {
             this.createAcl(o, contentCreator);
+        } else if (REP_POLICY.equals(n)) {
+            this.createAclFromPolicy((JSONObject) o, contentCreator);
         } else {
             return false;
         }
@@ -192,6 +190,8 @@ public class JsonReader implements ContentReader {
 
     protected void createNode(String name, JSONObject obj, ContentCreator contentCreator)
     throws JSONException, RepositoryException {
+
+
         Object primaryTypeObj = obj.opt("jcr:primaryType");
         String primaryType = null;
         if (primaryTypeObj != null) {
@@ -441,6 +441,41 @@ public class JsonReader implements ContentReader {
 
 		//do the work.
 		contentCreator.createAce(principalID, grantedPrivileges, deniedPrivileges, order);
+    }
+
+    private void createAclFromPolicy(JSONObject repPolicy, ContentCreator contentCreator)
+            throws JSONException, RepositoryException {
+
+        int order = 0;
+
+        for (Iterator<String> policyKeys = repPolicy.keys(); policyKeys.hasNext();) {
+            String policyKey = policyKeys.next();
+            if (policyKey.startsWith("allow") || policyKey.startsWith("deny")) {
+                JSONObject policy = repPolicy.optJSONObject(policyKey);
+                String principalID = policy.getString("rep:principalName");
+
+                String[] grantedPrivileges = null;
+                String[] deniedPrivileges = null;
+                JSONArray privileges = policy.optJSONArray("rep:privileges");
+                String policyPrimaryType = policy.getString("jcr:primaryType");
+                if ("rep:GrantACE".equals(policyPrimaryType)) {
+                    grantedPrivileges = new String[privileges.length()];
+                    for (int a = 0; a < privileges.length(); a++) {
+                        grantedPrivileges[a] = privileges.getString(a);
+                    }
+                } else {
+                    deniedPrivileges = new String[privileges.length()];
+                    for (int a = 0; a < privileges.length(); a++) {
+                        deniedPrivileges[a] = privileges.getString(a);
+                    }
+                }
+
+                //do the work.
+                contentCreator.createAce(principalID, grantedPrivileges, deniedPrivileges, String.valueOf(order));
+
+                order++;
+            }
+        }
     }
 
 }
